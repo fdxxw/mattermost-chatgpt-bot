@@ -100,7 +100,7 @@ impl Most {
             bot_token: bot_token.to_owned(),
             base_url: base_url.to_owned(),
             user_id: "".to_string(),
-            bot_name: bot_name.to_string()
+            bot_name: bot_name.to_string(),
         }
     }
     pub async fn me(&mut self) -> Result<(), Error> {
@@ -156,17 +156,20 @@ impl MostGPT {
         if message["seq"].as_i64() == Some(1) && message["event"].as_str() == Some("hello") {
             tracing::info!("Connected to Mattermost");
         } else if message["event"].as_str() == Some("posted") {
-            // tracing::debug!("received: {:?}", message);
+            // tracing::info!("received: {:?}", message);
             let post: Value = serde_json::from_str(message["data"]["post"].as_str().unwrap())?;
             let user_id = post["user_id"].as_str().ok_or("No user ID found")?;
             let channel_id = post["channel_id"].as_str().ok_or("No channel ID found")?;
+            let sender_name = message["data"]["sender_name"].as_str().unwrap_or("none");
             let channel_name = message["data"]["channel_name"]
                 .as_str()
                 .ok_or("No channel_name found")?;
             if user_id != self.most.user_id {
                 let message_text = post["message"].as_str().ok_or("No message text found")?;
                 let post_id = post["id"].as_str().ok_or("No post id found")?;
-                if message_text.contains(&format!("@{}", self.most.bot_name)) || channel_name.contains(&self.most.user_id) {
+                if message_text.contains(&format!("@{}", self.most.bot_name))
+                    || channel_name.contains(&self.most.user_id)
+                {
                     self.most
                         .posts(
                             channel_id,
@@ -198,6 +201,7 @@ impl MostGPT {
                         "content": message_text
                     });
                     send.push(this_send.clone());
+                    tracing::info!("sender_name: {}, question: {}", sender_name, message_text);
                     match self
                         .proxy_client
                         .post("https://api.openai.com/v1/chat/completions")
@@ -214,11 +218,41 @@ impl MostGPT {
                         Ok(gpt_res) => {
                             let v = gpt_res.json::<Value>().await?;
                             let answer = &v["choices"][0]["message"]["content"];
-                            session.lock().await.get_mut(user_id).unwrap().extend(vec![
-                                this_send,
-                                json!({"role": "assistant", "content": answer}),
-                            ]);
-                            self.most.posts(channel_id, answer, post_id).await?;
+                            match answer {
+                                Value::Null => {
+                                    tracing::warn!("sender_name: {}, 上下文过长", sender_name);
+                                    session.lock().await.get_mut(user_id).unwrap().reverse();
+                                    session.lock().await.get_mut(user_id).unwrap().truncate(4);
+                                    session.lock().await.get_mut(user_id).unwrap().reverse();
+                                    self.most
+                                        .posts(
+                                            channel_id,
+                                            &Value::String(
+                                                "上下文过长，已截断两次对话前的上下文，请重新提问"
+                                                    .to_owned(),
+                                            ),
+                                            post_id,
+                                        )
+                                        .await?;
+                                }
+                                _ => {
+                                    tracing::info!(
+                                        "sender_name: {}, answer: {}",
+                                        sender_name,
+                                        answer
+                                    );
+                                    tracing::info!(
+                                        "sender_name: {}, usage: {}",
+                                        sender_name,
+                                        &v["usage"]
+                                    );
+                                    session.lock().await.get_mut(user_id).unwrap().extend(vec![
+                                        this_send,
+                                        json!({"role": "assistant", "content": answer}),
+                                    ]);
+                                    self.most.posts(channel_id, answer, post_id).await?;
+                                }
+                            }
                         }
                         Err(e) => {
                             self.most
