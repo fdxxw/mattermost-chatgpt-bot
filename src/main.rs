@@ -170,6 +170,11 @@ impl MostGPT {
                 if message_text.contains(&format!("@{}", self.most.bot_name))
                     || channel_name.contains(&self.most.user_id)
                 {
+                    if message_text.contains("clear ctx") {
+                        session.lock().await.clear();
+                        self.most.posts(channel_id, &Value::String("已清空上下文信息".to_owned()), post_id).await?;
+                        return Ok(());
+                    }
                     self.most
                         .posts(
                             channel_id,
@@ -228,7 +233,7 @@ impl MostGPT {
                                         .posts(
                                             channel_id,
                                             &Value::String(
-                                                "上下文过长，已截断两次对话前的上下文，请重新提问"
+                                                "上下文过长，已截断两次对话前的上下文，请重新提问，你也可以发送 'clear ctx' 来清空上下文"
                                                     .to_owned(),
                                             ),
                                             post_id,
