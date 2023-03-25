@@ -6,9 +6,9 @@ use reqwest::{Client, Url};
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tracing_appender::{non_blocking, rolling};
 use tracing_subscriber::{
-    fmt::{self, time::FormatTime},
-    layer::Layered,
+    fmt::{self, time::FormatTime, writer::MakeWriterExt},
     prelude::__tracing_subscriber_SubscriberExt,
     util::SubscriberInitExt,
     EnvFilter, Registry,
@@ -26,14 +26,35 @@ impl FormatTime for LocalTimer {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
-    let formatting_layer = fmt::layer::<Layered<EnvFilter, Registry>>()
-        .pretty()
-        .with_writer(std::io::stdout)
-        .with_timer(LocalTimer);
+pub async fn main() -> Result<(), Error> {
+    let (debug_file, _guard) = non_blocking(rolling::daily("logs", "debug"));
+    let (warn_file, _guard) = non_blocking(rolling::daily("logs", "warning"));
+    let (info_file, _guard) = non_blocking(rolling::daily("logs", "info"));
+    let all_files = debug_file
+        .and(
+            warn_file
+                .with_max_level(tracing::Level::WARN)
+                .with_min_level(tracing::Level::ERROR),
+        )
+        .and(
+            info_file
+                .with_max_level(tracing::Level::INFO)
+                .with_min_level(tracing::Level::INFO),
+        );
     Registry::default()
         .with(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
-        .with(formatting_layer)
+        .with(
+            fmt::layer()
+                .pretty()
+                .with_writer(std::io::stdout)
+                .with_timer(LocalTimer),
+        )
+        .with(
+            fmt::layer()
+                .with_timer(LocalTimer)
+                .with_ansi(false)
+                .with_writer(all_files),
+        )
         .init();
     let mattermost_token = env::var("MATTERMOST_TOKEN").expect("ENV MATTERMOST_TOKEN");
     let openai_api_key = env::var("OPENAI_API_KEY").expect("ENV OPENAI_API_KEY");
@@ -172,7 +193,13 @@ impl MostGPT {
                 {
                     if message_text.contains("clear ctx") {
                         session.lock().await.clear();
-                        self.most.posts(channel_id, &Value::String("已清空上下文信息".to_owned()), post_id).await?;
+                        self.most
+                            .posts(
+                                channel_id,
+                                &Value::String("已清空上下文信息".to_owned()),
+                                post_id,
+                            )
+                            .await?;
                         return Ok(());
                     }
                     self.most
