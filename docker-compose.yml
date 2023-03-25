@@ -4,6 +4,8 @@ services:
     image: fdxxw/chatgpt-mattermost-bot:latest
     build: .
     restart: unless-stopped
+    volumes:
+      - ./logs:/opt/app/logs
     environment:
       MATTERMOST_URL: http://mattermost.server	
       MATTERMOST_TOKEN: abababacdcdcd

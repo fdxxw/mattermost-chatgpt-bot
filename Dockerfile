@@ -27,8 +27,8 @@ FROM alpine:3.17
 #RUN sed -i "s/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g" /etc/apk/repositories
 #RUN apk add --no-cache openssl-dev openssl
 
-COPY --from=build /app/target/x86_64-unknown-linux-musl/release/app /usr/local/bin/app
+COPY --from=build /app/target/x86_64-unknown-linux-musl/release/app /opt/app/app
 
-RUN chmod +x /usr/local/bin/app
+RUN chmod +x /opt/app/app
 
-CMD ["/usr/local/bin/app"]
+CMD ["/opt/app/app"]
