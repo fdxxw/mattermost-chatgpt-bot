@@ -31,4 +31,6 @@ COPY --from=build /app/target/x86_64-unknown-linux-musl/release/app /opt/app/app
 
 RUN chmod +x /opt/app/app
 
+WORKDIR /opt/app
+
 CMD ["/opt/app/app"]
