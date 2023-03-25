@@ -1,0 +1,12 @@
+version: "3"
+services: 
+  chatbot:
+    image: fdxxw/chatgpt-mattermost-bot:latest
+    build: .
+    restart: unless-stopped
+    environment:
+      MATTERMOST_URL: http://mattermost.server	
+      MATTERMOST_TOKEN: abababacdcdcd
+      OPENAI_API_KEY: sk-23423423423423423
+      MATTERMOST_BOT_NAME: chatgpt
+      OPENAI_API_PROXY: http://192.168.13.37:20171

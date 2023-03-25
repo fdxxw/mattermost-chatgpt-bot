@@ -1,27 +1,34 @@
 #第一阶段用于生成构建文件
-FROM rust:1.68-alpine3.16 as build
+FROM messense/rust-musl-cross:x86_64-musl as build
 
-WORKDIR /usr/src/app
-COPY ./ .
+RUN rm -rf ~/.rustup/toolchains/*
+RUN rustup update
+RUN rustup target add x86_64-unknown-linux-musl
 
-RUN sed -i "s/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g" /etc/apk/repositories
+WORKDIR /app
 
-RUN apk add --no-cache build-base  pkgconfig openssl openssl-dev
+RUN mkdir .cargo
+RUN echo "[source.crates-io] \nreplace-with = 'ustc' \n\n[source.ustc] \nregistry = \"git://mirrors.ustc.edu.cn/crates.io-index\"" > .cargo/config.toml
+RUN cat .cargo/config.toml
 
-#RUN apk add --no-cache cargo
+RUN echo "fn main() {}" > dummy.rs
+COPY ./Cargo.toml .
+RUN sed -i 's#src/main.rs#dummy.rs#' Cargo.toml
+RUN cargo build --release
 
-#编译构建文件
-RUN mkdir ~/.cargo
+RUN sed -i 's#dummy.rs#src/main.rs#' Cargo.toml
 
-RUN echo -e '[source.crates-io] \n replace-with = "tuna" \n [source.tuna] \n registry = "https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git"' > ~/.cargo/config
-
-RUN cat ~/.cargo/config
-
-RUN cargo build --release --target=x86_64-unknown-linux-musl 
+COPY ./src ./src
+RUN cargo build --release 
 
 #第二阶段生成最终的Docker镜像
-FROM alpine:3.16
+FROM alpine:3.17
 
-COPY --from=build /usr/src/app/target/x86_64-unknown-linux-musl/release/mattermost-chatgpt-bot /usr/local/bin/mattermost-chatgpt-bot
+#RUN sed -i "s/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g" /etc/apk/repositories
+#RUN apk add --no-cache openssl-dev openssl
 
-ENTRYPOINT ["/usr/local/bin/mattermost-chatgpt-bot"]
+COPY --from=build /app/target/x86_64-unknown-linux-musl/release/app /usr/local/bin/app
+
+RUN chmod +x /usr/local/bin/app
+
+CMD ["/usr/local/bin/app"]
