@@ -236,20 +236,22 @@ impl MostGPT {
                     tracing::info!("sender_name: {}, question: {}", sender_name, message_text);
                     match self
                         .proxy_client
-                        .post("https://api.openai.com/v1/chat/completions")
-                        .bearer_auth(&self.gpt_api_key)
-                        .header("Content-Type", "application/json")
+                        // .post("https://api.openai.com/v1/chat/completions")
+                        .post("https://www.sqlchat.ai/api/chat")
+                        // .bearer_auth(&self.gpt_api_key)
+                        // .header("Content-Type", "application/json")
                         .json(&json!({
                             "messages": send,
-                            "model": "gpt-3.5-turbo",
-                            "max_tokens": 1000
+                            // "model": "gpt-3.5-turbo",
+                            // "max_tokens": 1000
                         }))
                         .send()
                         .await
                     {
                         Ok(gpt_res) => {
-                            let v = gpt_res.json::<Value>().await?;
-                            let answer = &v["choices"][0]["message"]["content"];
+                            // let v = gpt_res.json::<Value>().await?;
+                            // let answer = &v["choices"][0]["message"]["content"];
+                            let answer = &Value::String(gpt_res.text().await?);
                             match answer {
                                 Value::Null => {
                                     tracing::warn!("sender_name: {}, 上下文过长", sender_name);
@@ -273,11 +275,11 @@ impl MostGPT {
                                         sender_name,
                                         answer
                                     );
-                                    tracing::info!(
-                                        "sender_name: {}, usage: {}",
-                                        sender_name,
-                                        &v["usage"]
-                                    );
+                                    // tracing::info!(
+                                    //     "sender_name: {}, usage: {}",
+                                    //     sender_name,
+                                    //     &v["usage"]
+                                    // );
                                     session.lock().await.get_mut(user_id).unwrap().extend(vec![
                                         this_send,
                                         json!({"role": "assistant", "content": answer}),
